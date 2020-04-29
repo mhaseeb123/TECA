@@ -185,7 +185,7 @@ teca_add_test(py_test_tc_activity
 teca_add_test(py_test_tc_trajectory_scalars_serial
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_tc_trajectory_scalars.py
     "${TECA_DATA_ROOT}/tracks_1990s_3hr_mdd_4800_median_in_cat_wr.bin"
-    "${TECA_DATA_ROOT}/earthmap4k.png"
+    "${TECA_ASSETS_ROOT}/earthmap4k.png"
     "${TECA_DATA_ROOT}/py_test_tc_trajectory_scalars.bin" 0 -1
     FEATURES ${TECA_HAS_UDUNITS}
     REQ_TECA_DATA)
@@ -194,7 +194,7 @@ teca_add_test(py_test_tc_trajectory_scalars_mpi
     COMMAND ${MPIEXEC} -n ${TEST_CORES} ${PYTHON_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/test_tc_trajectory_scalars.py
     "${TECA_DATA_ROOT}/tracks_1990s_3hr_mdd_4800_median_in_cat_wr.bin"
-    "${TECA_DATA_ROOT}/earthmap4k.png"
+    "${TECA_ASSETS_ROOT}/earthmap4k.png"
     "${TECA_DATA_ROOT}/py_test_tc_trajectory_scalars.bin" 0 -1
     FEATURES ${TECA_HAS_UDUNITS} ${TECA_HAS_MPI} ${MPI4Py_FOUND}
     REQ_TECA_DATA)
@@ -232,8 +232,8 @@ teca_add_test(py_test_bayesian_ar_detect_mpi_threads
 
 teca_add_test(py_test_deeplabv3p_ar_detect
     COMMAND  ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_deeplabv3p_ar_detect.py
-    "${TECA_DATA_ROOT}/cascade_deeplab_IVT.pt"
-    "${TECA_DATA_ROOT}/resnet101-5d3b4d8f-state_dict.pth"
+    "${TECA_ASSETS_ROOT}/cascade_deeplab_IVT.pt"
+    "${TECA_ASSETS_ROOT}/resnet101-5d3b4d8f-state_dict.pth"
     "${TECA_DATA_ROOT}/ARTMIP_MERRA_2D.*\.nc$"
     "${TECA_DATA_ROOT}/test_deeplabv3p_ar_detect.bin" IVT 1
     FEATURES ${TECA_HAS_NETCDF}
@@ -241,11 +241,11 @@ teca_add_test(py_test_deeplabv3p_ar_detect
 
 teca_add_test(py_test_deeplabv3p_ar_detect_mpi
     COMMAND ${MPIEXEC} -n ${HALF_TEST_CORES} ${PYTHON_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_deeplabv3p_ar_detect.py
-       "${TECA_DATA_ROOT}/cascade_deeplab_IVT.pt"
-        "${TECA_DATA_ROOT}/resnet101-5d3b4d8f-state_dict.pth"
-        "${TECA_DATA_ROOT}/ARTMIP_MERRA_2D.*\.nc$"
-        "${TECA_DATA_ROOT}/test_deeplabv3p_ar_detect.bin" IVT 1
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_deeplabv3p_ar_detect.py
+    "${TECA_ASSETS_ROOT}/cascade_deeplab_IVT.pt"
+    "${TECA_ASSETS_ROOT}/resnet101-5d3b4d8f-state_dict.pth"
+    "${TECA_DATA_ROOT}/ARTMIP_MERRA_2D.*\.nc$"
+    "${TECA_DATA_ROOT}/test_deeplabv3p_ar_detect.bin" IVT 1
     FEATURES ${TECA_HAS_NETCDF} ${TECA_HAS_MPI} ${MPI4Py_FOUND}
     REQ_TECA_DATA)
 

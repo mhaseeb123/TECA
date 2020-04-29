@@ -327,6 +327,20 @@ else()
 endif()
 set(TECA_HAS_DATA ${tmp} CACHE BOOL "TECA_data is present")
 
+# do we have access to a checkout of TECA_assets?
+set(tmp OFF)
+set(TECA_ASSETS_ROOT "/path/to/TECA_assets"
+    CACHE PATH "Path to TECA_assets repository")
+if (EXISTS "${TECA_ASSETS_ROOT}")
+    set(tmp ON)
+    message(STATUS "TECA_assets -- available")
+elseif (REQUIRE_TECA_ASSETS)
+    message(FATAL_ERROR "TECA_assets -- required but not found")
+else()
+    message(STATUS "TECA_assets -- not available")
+endif()
+set(TECA_HAS_ASSETS ${tmp} CACHE BOOL "TECA_assets is present")
+
 # generate global configuration
 include(CMake/teca_test.cmake)
 include(CMake/teca_app.cmake)
