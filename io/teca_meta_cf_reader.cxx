@@ -21,9 +21,6 @@
 #include <memory>
 #include <iomanip>
 
-using std::endl;
-using std::cerr;
-
 #if defined(TECA_HAS_MPI)
 #include <mpi.h>
 #endif
@@ -129,6 +126,10 @@ void teca_meta_cf_reader::get_properties_description(
 {
     options_description opts("Options for "
         + (prefix.empty()?"teca_meta_cf_reader":prefix));
+
+
+    // TODO do we expose common properties, apply to all readers??
+    // but the readers might not exist at this point...
 
     /*opts.add_options()
         TECA_POPTS_GET(std::vector<std::string>, prefix, file_names,
@@ -254,7 +255,30 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
         return this->internals->metadata;
 
     // update the metadata for the managed readers
-    
+    reader_map_t::iterator it = this->internals->readers.begin();
+    reader_map_t::iterator end = this->internals->readers.end();
+    for (; it != end; ++it)
+    {
+        const std::string &key = it->first;
+        p_cf_reader_instance &inst = it->second;
+
+        if (!inst->metadata)
+            inst->metadata = inst->reader->update_metadata();
+         
+        if (key == this->internals->time_reader)
+        {
+            // pass time axis
+        }
+
+        if (key == this->internals->geometry_reader)
+        {
+            // pass mesh axes
+        }
+       
+        // pass variable attributes
+    }
+
+
 
 
     int rank = 0;
