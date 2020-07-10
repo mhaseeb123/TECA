@@ -254,6 +254,11 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
     if (this->internals->metadata)
         return this->internals->metadata;
 
+    teca_metadata md_out;
+    teca_metadata atts_out;
+    teca_metadata coords_out;
+    std::vector<std::string> variables;
+
     // update the metadata for the managed readers
     reader_map_t::iterator it = this->internals->readers.begin();
     reader_map_t::iterator end = this->internals->readers.end();
@@ -264,21 +269,120 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
 
         if (!inst->metadata)
             inst->metadata = inst->reader->update_metadata();
-         
+
+        teca_metadata atts_in;
+        inst->metadata.get("attributes", atts_in);
+
+        teca_metadata coords_in;
+        inst->metadata.get("coordinates", coords_in);
+
         if (key == this->internals->time_reader)
         {
-            // pass time axis
+            //pass time axis and attributes
+            teca_metadata_util::copy(
+            std::string t_variable;
+            inst->metadata.get("t_variable", t_variable);
+            atts_out.set(t_variable, atts_in.get(t_variable);
+
+            // pass pipeline control keys
+            std::string ii_key;
+            inst->metadata.get("index_initializer_key", ii_key);
+
+            std::string ir_key;
+            inst->metadata.get("index_request_key", ir_key);
+
+            long n_indices = 0;
+            ins->metadata.get(ii_key, n_indices):
+
         }
 
         if (key == this->internals->geometry_reader)
         {
             // pass mesh axes
         }
-       
+
         // pass variable attributes
+        std::set<std::string>::iterator it = inst->variables.begin();
+        std::set<std::string>::iterator end = inst->variables.end();
+        for (; it != end; ++it)
+        {
+
+        }
     }
 
+md=attributes = {{IVT = {{_FillValue = {1e+15}
+centering = {2}
+cf_dim_names = {"time", "lat", "lon"}
+cf_dims = {8, 181, 145}
+cf_id = {3}
+cf_type_code = {5}
+fmissing_value = {1e+15}
+lev = {1000}
+long_name = {"Integrated Water Vapor Transport"}
+missing_value = {1e+15}
+short_name = {"IVT"}
+standard_name = {"eastward_wind"}
+time = {0}
+type_code = {11}
+units = {"kg/m/s"}
+vmax = {1e+15}
+vmin = {-1e+15}
+}}
+lat = {{axis = {"Y"}
+centering = {2}
+cf_dim_names = {"lat"}
+cf_dims = {181}
+cf_id = {1}
+cf_type_code = {6}
+long_name = {"latitude"}
+standard_name = {"latitude"}
+type_code = {12}
+units = {"degrees_north"}
+}}
+lon = {{axis = {"X"}
+centering = {2}
+cf_dim_names = {"lon"}
+cf_dims = {145}
+cf_id = {2}
+cf_type_code = {6}
+long_name = {"longitude"}
+standard_name = {"longitude"}
+type_code = {12}
+units = {"degrees_east"}
+}}
+time = {{calendar = {"standard"}
+centering = {2}
+cf_dim_names = {"time"}
+cf_dims = {8}
+cf_id = {0}
+cf_type_code = {6}
+type_code = {12}
+units = {"days since 1979-01-01 00:00:00"}
+}}
+}}
+bounds = {-180, -90, -1.79751e-13, 90, 0, 0}
+coordinates = {{periodic_in_x = {0}
+periodic_in_y = {0}
+periodic_in_z = {0}
+t = {14015, 14015.1, 14015.2, 14015.4, 14015.5, 14015.6, 14015.8, 14015.9}
+t_variable = {"time"}
+x = {-180, -179.375, -178.75, -178.125, -177.5, -176.875, -176.25, -175.625, -175, -174.375, -173.75, -173.125, -172.5, -171.875, -171.25, -170.625, -170, -169.375, -168.75, -168.125, -167.5, -166.875, -166.25, -165.625, -165, -164.375, -163.75, -163.125, -162.5, -161.875, -161.25, -160.625, -160, -159.375, -158.75, -158.125, -157.5, -156.875, -156.25, -155.625, -155, -154.375, -153.75, -153.125, -152.5, -151.875, -151.25, -150.625, -150, -149.375, -148.75, -148.125, -147.5, -146.875, -146.25, -145.625, -145, -144.375, -143.75, -143.125, -142.5, -141.875, -141.25, -140.625, -140, -139.375, -138.75, -138.125, -137.5, -136.875, -136.25, -135.625, -135, -134.375, -133.75, -133.125, -132.5, -131.875, -131.25, -130.625, -130, -129.375, -128.75, -128.125, -127.5, -126.875, -126.25, -125.625, -125, -124.375, -123.75, -123.125, -122.5, -121.875, -121.25, -120.625, -120, -119.375, -118.75, -118.125, -117.5, -116.875, -116.25, -115.625, -115, -114.375, -113.75, -113.125, -112.5, -111.875, -111.25, -110.625, -110, -109.375, -108.75, -108.125, -107.5, -106.875, -106.25, -105.625, -105, -104.375, -103.75, -103.125, -102.5, -101.875, -101.25, -100.625, -100, -99.375, -98.75, -98.125, -97.5, -96.875, -96.25, -95.625, -95, -94.375, -93.75, -93.125, -92.5, -91.875, -91.25, -90.625, -90}
+x_variable = {"lon"}
+y = {-1.79751e-13, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70, 70.5, 71, 71.5, 72, 72.5, 73, 73.5, 74, 74.5, 75, 75.5, 76, 76.5, 77, 77.5, 78, 78.5, 79, 79.5, 80, 80.5, 81, 81.5, 82, 82.5, 83, 83.5, 84, 84.5, 85, 85.5, 86, 86.5, 87, 87.5, 88, 88.5, 89, 89.5, 90}
+y_variable = {"lat"}
+z = {0}
+z_variable = {"z"}
+}}
+files = {"ARTMIP_MERRA_2D_2017-05-16-00Z.nc"}
+index_initializer_key = {"number_of_time_steps"}
+index_request_key = {"time_step"}
+number_of_time_steps = {8}
+root = {"../../TECA_data"}
+step_count = {8}
+variables = {"time", "lat", "lon", "IVT"}
+whole_extent = {0, 144, 0, 180, 0, 0}
 
+3764
 
 
     int rank = 0;
