@@ -11,7 +11,7 @@ namespace teca_metadata_util
 // then we remove all the variables in the "arrays" set that end with
 // this post-fix, and replace it with the actual requested array.
 void remove_post_fix(std::set<std::string> &arrays, std::string post_fix);
-
+/*
 // copies a key value pair from src to dest with error checking
 template <typename value_t>
 int copy(teca_metadata &dest, const teca_metadata &src,
@@ -26,6 +26,7 @@ int copy(teca_metadata &dest, const teca_metadata &src,
     dest.set(key, val);
     return 0;
 }
+*/
 
 };
 #endif
