@@ -25,7 +25,13 @@ endif()
 set(teca_io_link teca_system)
 
 if (TECA_HAS_NETCDF)
-    list(APPEND teca_io_srcs teca_netcdf_util.cxx teca_cf_reader.cxx teca_cf_writer.cxx)
+    list(APPEND teca_io_srcs
+        teca_netcdf_util.cxx
+        teca_cf_reader.cxx
+        teca_cf_writer.cxx
+        teca_meta_cf_reader.cxx
+        )
+
     list(APPEND teca_io_link NetCDF)
     if (TECA_HAS_OPENSSL)
         include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})

@@ -1,9 +1,15 @@
-#ifndef teca_algorithm_h
-#define teca_algorithm_h
+#ifndef teca_meta_cf_reader_h
+#define teca_meta_cf_reader_h
 
 #include "teca_algorithm.h"
+#include "teca_metadata.h"
+#include "teca_shared_object.h"
 
-TECA_SHARED_OBJECT_FORWARD_DECL(teca_cf_reader)
+#include <set>
+#include <vector>
+#include <string>
+
+TECA_SHARED_OBJECT_FORWARD_DECL(teca_meta_cf_reader)
 
 class teca_meta_cf_reader_internals;
 using p_teca_meta_cf_reader_internals = std::shared_ptr<teca_meta_cf_reader_internals>;
@@ -25,32 +31,80 @@ public:
 
     // adds a reader to the collection and at the same time specifies
     // how it will be used.
-    void add_reader(const std::string &key,
-        const p_teca_cf_reader &reader,
+    int add_reader(const std::string &key,
+        const std::string &files_regex,
         int provides_time, int provides_geometry,
-        const std::set<std::string> &variables);
-
+        const std::vector<std::string> &variables);
+/*
     // adds a reader to the collection.
-    void add_reader(const std::string &key,
-        const p_teca_cf_reader &reader);
-
+    int add_reader(const std::string &key,
+        const std::string &files_regex);
+*/
     // sets the reader that provides the time axis
-    void set_time_reader(const std::string &key);
+    int set_time_reader(const std::string &key);
 
     // sets the reader that provides the mesh geometry
-    void set_geometry_reader(const std::string &key);
+    int set_geometry_reader(const std::string &key);
 
     // adds to the list of variables that a reader will provide
-    void add_variable_reader(const std::string &key,
+    int add_variable_reader(const std::string &key,
         const std::string &variable);
 
     // sets the list of variable that a reader will provide.
-    void set_variable_reader(const std::string &key,
-        const std::set<std::string> &variable)
+    int set_variable_reader(const std::string &key,
+        const std::vector<std::string> &variable);
 
+    // the directory where metadata should be cached. if this is not specified
+    // metadata is cached either with the data, in the CWD, or in the user's
+    // home dir, which ever location succeeds first.
+    TECA_ALGORITHM_PROPERTY(std::string, metadata_cache_dir)
+
+    // set if the dataset has periodic boundary conditions
+    TECA_ALGORITHM_PROPERTY(int, periodic_in_x)
+    TECA_ALGORITHM_PROPERTY(int, periodic_in_y)
+    TECA_ALGORITHM_PROPERTY(int, periodic_in_z)
+
+    // set the variable to use for the coordinate axes.
+    // the defaults are: x => lon, y => lat, z = "",
+    // t => "time". leaving z empty will result in a 2D
+    // mesh.
+    TECA_ALGORITHM_PROPERTY(std::string, x_axis_variable)
+    TECA_ALGORITHM_PROPERTY(std::string, y_axis_variable)
+    TECA_ALGORITHM_PROPERTY(std::string, z_axis_variable)
+    TECA_ALGORITHM_PROPERTY(std::string, t_axis_variable)
+
+    // time calendar and time unit if the user wants to
+    // specify them
+    TECA_ALGORITHM_PROPERTY(std::string, t_calendar)
+    TECA_ALGORITHM_PROPERTY(std::string, t_units)
+
+    // a way to infer time from the filename if the time axis is not
+    // stored in the file itself. strftime format codes are used.
+    // For example for the files:
+    //
+    //      my_file_20170516_00.nc
+    //      my_file_20170516_03.nc
+    //      ...
+    //
+    // the template would be
+    //
+    //      my_file_%Y%m%d_%H.nc
+    TECA_ALGORITHM_PROPERTY(std::string, filename_time_template)
+
+    // time values to use instead if time variable doesn't
+    // exist.
+    TECA_ALGORITHM_VECTOR_PROPERTY(double, t_value)
+
+    // set/get the number of threads in the pool. setting
+    // to less than 1 results in 1 - the number of cores.
+    // the default is 1.
+    TECA_ALGORITHM_PROPERTY(int, thread_pool_size)
 
 protected:
     teca_meta_cf_reader();
+
+private:
+    void clear_cached_metadata();
 
     teca_metadata get_output_metadata(unsigned int port,
         const std::vector<teca_metadata> &input_md) override;
@@ -59,8 +113,24 @@ protected:
         const std::vector<const_p_teca_dataset> &input_data,
         const teca_metadata &request) override;
 
+    void set_modified() override;
+
 private:
-    teca_algorithm_internals *internals;
+    std::string metadata_cache_dir;
+    std::string x_axis_variable;
+    std::string y_axis_variable;
+    std::string z_axis_variable;
+    std::string t_axis_variable;
+    std::string t_calendar;
+    std::string t_units;
+    std::string filename_time_template;
+    std::vector<double> t_values;
+    int periodic_in_x;
+    int periodic_in_y;
+    int periodic_in_z;
+    int thread_pool_size;
+
+    p_teca_meta_cf_reader_internals internals;
 };
 
 #endif

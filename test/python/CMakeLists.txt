@@ -5,6 +5,16 @@ teca_add_test(py_test_cf_reader
     FEATURES ${TECA_HAS_NETCDF}
     REQ_TECA_DATA)
 
+teca_add_test(py_test_metacf_reader
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_meta_cf_reader.py
+    -o "test_%t%.nc" -b "${TECA_DATA_ROOT}/baseline.nc"
+    "\\(" "${TECA_DATA_ROOT}/regex1" "varname" "\\)"
+    "\\(" "${TECA_DATA_ROOT}/regex1" "varname" "\\)"
+    "\\(" "${TECA_DATA_ROOT}/regex1" "varname" "\\)"
+    "\\(" "${TECA_DATA_ROOT}/regex1" "varname" "\\)"
+    FEATURES ${TECA_HAS_NETCDF}
+    REQ_TECA_DATA)
+
 teca_add_test(py_test_cf_writer_serial
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_cf_writer.py
     "${TECA_DATA_ROOT}/cam5_1_amip_run2\\.cam2\\.h2\\.1991-10-0[12]-10800\\.nc"
