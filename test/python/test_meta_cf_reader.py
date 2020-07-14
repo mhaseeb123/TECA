@@ -8,6 +8,8 @@ def parse_args(args):
     var = []
     out_file = ''
     baseline = ''
+    time_reader = ''
+    geometry_reader = ''
     tmp_vars = []
     in_list = False
     it = iter(args)
@@ -21,7 +23,7 @@ def parse_args(args):
 
             elif in_list:
                 tmp_vars.append(arg)
-            
+
             elif arg == '(':
                 in_list = True
                 tmp_vars = []
@@ -61,25 +63,30 @@ def parse_args(args):
                 sys.exit(-1)
 
         except StopIteration:
-            pass
-
-        return regex, time_reader, geometry_reader, var, out_file, baseline
-
-
+            return regex, time_reader, geometry_reader, var, out_file, baseline
 
 
 regex, time_reader, geometry_reader, var, out_file, baseline = parse_args(sys.argv)
+
+
+print(regex)
+print(time_reader)
+print(geometry_reader)
+print(var)
+print(out_file)
+print(baseline)
+
+
 
 cfr = teca_meta_cf_reader.New()
 n = len(regex)
 i = 0
 while i < n:
     key = 'r_%d'%(i)
-    cfr.add_reader(key, regex[i], 0, 0, var[i])  
+    cfr.add_reader(key, regex[i], 0, 0, var[i])
     i += 1
 
 
-cfr.set_files_regex(data_regex)
 cfr.set_x_axis_variable('lon')
 cfr.set_y_axis_variable('lat')
 cfr.set_t_axis_variable('time')

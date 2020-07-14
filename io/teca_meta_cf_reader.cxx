@@ -3,6 +3,8 @@
 #include "teca_file_util.h"
 #include "teca_cartesian_mesh.h"
 #include "teca_cf_reader.h"
+#include "teca_array_collection.h"
+#include "teca_programmable_algorithm.h"
 
 #include <iostream>
 #include <algorithm>
@@ -34,8 +36,19 @@ public:
     teca_meta_cf_reader_internals()
     {}
 
+    // read a subset of arrays using the passed in reader. the passed
+    // request defines what is read except that only the passed in arrays
+    // will be read. the resulting data is pointed to by mesh_out.
+    // returns 0 if successful.
+    static
+    int read_arrays(p_teca_cf_reader reader,
+        const teca_metadata &request,
+        const std::vector<std::string> &arrays,
+        p_teca_cartesian_mesh &mesh_out);
+
 #if defined(TECA_HAS_OPENSSL)
     // create a key used to identify metadata
+    static
     std::string create_metadata_cache_key(const std::string &path,
         const std::vector<std::string> &files);
 #endif
@@ -61,6 +74,49 @@ public:
     using reader_map_t = std::map<std::string, p_cf_reader_instance>;
     reader_map_t readers;
 };
+
+// --------------------------------------------------------------------------
+int teca_meta_cf_reader_internals::read_arrays(p_teca_cf_reader reader,
+    const teca_metadata &request, const std::vector<std::string> &arrays,
+    p_teca_cartesian_mesh &mesh_out)
+{
+    // this stage will inject the arrays into the request
+    // and extract the mesh
+    p_teca_programmable_algorithm dc = teca_programmable_algorithm::New();
+
+    dc->set_name("reader_driver");
+
+    dc->set_request_callback([&](unsigned int,
+        const std::vector<teca_metadata> &,
+        const teca_metadata &) -> std::vector<teca_metadata>
+        {
+            teca_metadata req(request);
+            req.set("arrays", arrays);
+            return {req};
+        });
+
+    dc->set_execute_callback([&](unsigned int,
+        const std::vector<const_p_teca_dataset> &data_in,
+        const teca_metadata &) -> const_p_teca_dataset
+        {
+            if (data_in.size())
+                mesh_out = std::dynamic_pointer_cast<teca_cartesian_mesh>(
+                    std::const_pointer_cast<teca_dataset>(data_in[0]));
+            return nullptr;
+        });
+
+    dc->set_input_connection(reader->get_output_port());
+
+    // read the data
+    dc->update();
+
+    // check for errors
+    if (!mesh_out)
+        return -1;
+
+    return 0;
+}
+
 
 #if defined(TECA_HAS_OPENSSL)
 // --------------------------------------------------------------------------
@@ -209,7 +265,9 @@ int teca_meta_cf_reader::add_reader(const std::string &key,
     reader->set_files_regex(files_regex);
 
     this->internals->readers[key] =
-        teca_meta_cf_reader_internals::p_cf_reader_instance(new teca_meta_cf_reader_internals::cf_reader_instance(reader, std::set<std::string>(variables.begin(), variables.end())));
+        teca_meta_cf_reader_internals::p_cf_reader_instance(
+            new teca_meta_cf_reader_internals::cf_reader_instance(
+                reader, std::set<std::string>(variables.begin(), variables.end())));
 
     if (provides_time)
         this->internals->time_reader = key;
@@ -223,7 +281,9 @@ int teca_meta_cf_reader::add_reader(const std::string &key,
 // --------------------------------------------------------------------------
 int teca_meta_cf_reader::set_time_reader(const std::string &key)
 {
-    teca_meta_cf_reader_internals::reader_map_t::iterator it = this->internals->readers.find(key);
+    teca_meta_cf_reader_internals::reader_map_t::iterator it =
+        this->internals->readers.find(key);
+
     if (it == this->internals->readers.end())
     {
         TECA_ERROR("No reader associated with \"" << key << "\"")
@@ -319,6 +379,7 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
         inst->reader->set_periodic_in_y(this->periodic_in_y);
         inst->reader->set_periodic_in_z(this->periodic_in_z);
         inst->reader->set_thread_pool_size(this->thread_pool_size);
+
         // update the internal reader's metadata
         inst->metadata = inst->reader->update_metadata();
 
@@ -373,7 +434,7 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
                 return teca_metadata();
             }
             this->internals->metadata.set("index_request_key", request_key);
-    
+
             long n_indices = 0;
             if (inst->metadata.get(initializer_key, n_indices))
             {
@@ -395,14 +456,17 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
             }
             coords_out.set("x_variable", x_variable);
 
-            teca_metadata x_atts;
-            if (atts_in.get(x_variable, x_atts))
+            if (!this->x_axis_variable.empty())
             {
-                TECA_ERROR("Failed to get attributes for \""
-                    << x_variable << "\"")
-                return teca_metadata();
+                teca_metadata x_atts;
+                if (atts_in.get(x_variable, x_atts))
+                {
+                    TECA_ERROR("Failed to get attributes for \""
+                        << x_variable << "\"")
+                    return teca_metadata();
+                }
+                atts_out.set(x_variable, x_atts);
             }
-            atts_out.set(x_variable, x_atts);
 
             p_teca_variant_array x = coords_in.get("x");
             if (!x)
@@ -421,14 +485,17 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
             }
             coords_out.set("y_variable", y_variable);
 
-            teca_metadata y_atts;
-            if (atts_in.get(y_variable, y_atts))
+            if (!this->y_axis_variable.empty())
             {
-                TECA_ERROR("Failed to get attributes for \""
-                    << y_variable << "\"")
-                return teca_metadata();
+                teca_metadata y_atts;
+                if (atts_in.get(y_variable, y_atts))
+                {
+                    TECA_ERROR("Failed to get attributes for \""
+                        << y_variable << "\"")
+                    return teca_metadata();
+                }
+                atts_out.set(y_variable, y_atts);
             }
-            atts_out.set(y_variable, y_atts);
 
             p_teca_variant_array y = coords_in.get("y");
             if (!y)
@@ -447,14 +514,17 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
             }
             coords_out.set("z_variable", z_variable);
 
-            teca_metadata z_atts;
-            if (atts_in.get(z_variable, z_atts))
+            if (!this->z_axis_variable.empty())
             {
-                TECA_ERROR("Failed to get attributes for \""
-                    << z_variable << "\"")
-                return teca_metadata();
+                teca_metadata z_atts;
+                if (atts_in.get(z_variable, z_atts))
+                {
+                    TECA_ERROR("Failed to get attributes for \""
+                        << z_variable << "\"")
+                    return teca_metadata();
+                }
+                atts_out.set(z_variable, z_atts);
             }
-            atts_out.set(z_variable, z_atts);
 
             p_teca_variant_array z = coords_in.get("z");
             if (!z)
@@ -494,7 +564,7 @@ teca_metadata teca_meta_cf_reader::get_output_metadata(
         for (; it != end; ++it)
         {
             const std::string &var_name = *it;
-            
+
             // add it to the list of variables exposed down stream
             vars_out.push_back(var_name);
 
@@ -527,5 +597,76 @@ const_p_teca_dataset teca_meta_cf_reader::execute(unsigned int port,
 #endif
     (void)port;
     (void)input_data;
-    return nullptr;
+
+    // get the requested arrays
+    std::vector<std::string> req_arrays;
+    request.get("arrays", req_arrays);
+    size_t n_arrays = req_arrays.size();
+
+    // route the requested arrays to the correct reader.
+    using array_router_t = std::map<std::string, std::vector<std::string>>;
+    using reader_map_it_t = teca_meta_cf_reader_internals::reader_map_t::iterator;
+
+    array_router_t array_router;
+
+    reader_map_it_t it = this->internals->readers.begin();
+    reader_map_it_t end = this->internals->readers.end();
+    for (; it != end; ++it)
+    {
+        const std::string &key = it->first;
+        teca_meta_cf_reader_internals::p_cf_reader_instance &inst = it->second;
+
+        for (size_t i = 0; i < n_arrays; ++i)
+        {
+            const std::string &array = req_arrays[i];
+            std::set<std::string>::iterator vit = inst->variables.find(array);
+            if (vit != inst->variables.end())
+                array_router[key].push_back(*vit);
+        }
+    }
+
+    // read mesh geometry first
+    p_teca_cartesian_mesh mesh_out;
+    if (teca_meta_cf_reader_internals::read_arrays(
+        this->internals->readers[this->internals->geometry_reader]->reader,
+        request, array_router[this->internals->geometry_reader], mesh_out))
+    {
+        TECA_ERROR("Failed to read mesh geometry")
+        return nullptr;
+    }
+
+    // read the rest of the arrays
+    it = this->internals->readers.begin();
+    for (; it != end; ++it)
+    {
+        const std::string &key = it->first;
+        teca_meta_cf_reader_internals::p_cf_reader_instance &inst = it->second;
+
+        // skip the geometry reader, we already read those above
+        if (key == this->internals->geometry_reader)
+            continue;
+
+        // read the reader's arrays
+        p_teca_cartesian_mesh tmp;
+        if (teca_meta_cf_reader_internals::read_arrays(inst->reader,
+            request, array_router[key], tmp))
+        {
+            TECA_ERROR("Failed to read mesh geometry")
+            return nullptr;
+        }
+
+        // pass them into the output
+        if (mesh_out->get_point_arrays()->append(tmp->get_point_arrays()) ||
+            mesh_out->get_cell_arrays()->append(tmp->get_cell_arrays()) ||
+            mesh_out->get_edge_arrays()->append(tmp->get_edge_arrays()) ||
+            mesh_out->get_face_arrays()->append(tmp->get_face_arrays()) ||
+            mesh_out->get_information_arrays()->append(
+                tmp->get_information_arrays()))
+        {
+            TECA_ERROR("Failed to pass the arrays")
+            return nullptr;
+        }
+    }
+
+    return mesh_out;
 }
