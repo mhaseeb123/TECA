@@ -2,3 +2,6 @@
 *.patch
 _build
 *.pt
+build*
+*install*
+.vscode*

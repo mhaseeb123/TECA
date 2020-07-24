@@ -378,8 +378,10 @@ int main(int argc, char **argv)
     cfw->set_executive(wex);
     cfw->update();
 
+#if defined(TECA_HAS_MPI)
     // make sure the data makes it to disk
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
 #if __APPLE__
     sleep(10);
 #endif
