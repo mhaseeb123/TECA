@@ -53,6 +53,175 @@
 #include <limits>
 #include <cstdio>
 
+// Get system RAM used by the process associated with the given
+// process id in units of KiB.
+inline static int64_t get_proc_memory_used();
+
+#if defined(TECA_HAS_TIMEMORY)
+
+// timemory includes
+#define TIMEMORY_USE_MANAGER_EXTERN
+#include "timemory/timemory.hpp"
+
+using namespace tim::component;
+
+// type-traits for curr_proc_mem
+TIMEMORY_DECLARE_COMPONENT(curr_proc_mem)
+
+TIMEMORY_DEFINE_CONCRETE_TRAIT(is_memory_category, component::curr_proc_mem, true_type)
+TIMEMORY_DEFINE_CONCRETE_TRAIT(uses_memory_units, component::curr_proc_mem, true_type)
+TIMEMORY_STATISTICS_TYPE(component::curr_proc_mem, int64_t)
+
+// user global bundle, can be added to mem_measurement_t
+using mem_bundle_t      = user_global_bundle;
+using bundle_t          = mem_bundle_t;
+
+// components for memory profiler
+using mem_measurement_t = tim::component_tuple_t<wall_clock, curr_proc_mem>;
+
+// **************************************************************************
+
+namespace tim
+{
+namespace component
+{
+struct curr_proc_mem : public base<curr_proc_mem, int64_t>
+{
+    // alias to the type of data being recorded is stored
+    using value_type = int64_t;
+
+    // alias to base type that implements a lot of the functionality
+    using base_type  = base<curr_proc_mem, value_type>;
+
+    static std::string label() { return "curr_proc_mem"; }
+
+    // --------------------------------------------------------------------------
+    static std::string description()
+    {
+        return "Measures the current system RAM being used "
+               "by this process in units of KiB";
+    }
+
+    // --------------------------------------------------------------------------
+    // these handle units conversions and descriptions
+    static int64_t     unit() { return units::KB; }
+    
+    // --------------------------------------------------------------------------
+    static std::string display_unit() { return "KB"; }
+
+    // --------------------------------------------------------------------------
+    // this defines how to record a value for the component
+    static value_type record()
+    {
+        return get_proc_memory_used();
+    }
+
+    // --------------------------------------------------------------------------
+    // this defines how to get the relevant data from the component and can
+    // return any type
+    int64_t get() const
+    {
+        return value;
+    }
+
+    // --------------------------------------------------------------------------
+    // this defines how the value is represented in '<<' and can return any type
+    int64_t get_display() const
+    {
+        return this->get();
+    }
+
+    // --------------------------------------------------------------------------
+    // this defines what happens when the components is started
+    void start()
+    {
+        base_type::set_started();
+        value = record();
+    }
+
+    // --------------------------------------------------------------------------
+    // this defines what happens when the components is stopped
+    void stop()
+    {
+        value = record();
+        base_type::set_stopped();
+    }
+};
+
+} //namespace component
+} //namespace tim
+
+
+// **************************************************************************
+namespace measure
+{
+// ----------------------------------------------------------------------------
+// tuple access helper functions
+template <typename Tuple, typename F, std::size_t ...Indices>
+void for_each_impl(Tuple&& tuple, F&& f, std::index_sequence<Indices...>) {
+    using swallow = int[];
+    (void)swallow{1,
+        (f(std::get<Indices>(std::forward<Tuple>(tuple))), void(), int{})...
+    };
+}
+
+// ----------------------------------------------------------------------------
+// tuple access helper functions
+template <typename Tuple, typename F>
+void apply_tuple(Tuple&& tuple, F&& f) {
+    constexpr std::size_t N = std::tuple_size<std::remove_reference_t<Tuple>>::value;
+    for_each_impl(std::forward<Tuple>(tuple), std::forward<F>(f), 
+                  std::make_index_sequence<N>{});
+}
+
+namespace mem
+{
+// is global bundle configured
+static bool is_configured = false;
+
+// ----------------------------------------------------------------------------
+// print static component names onto the stringstream
+template<typename Tp>
+void write_names(Tp comp, std::ostringstream& oss)
+{
+    auto name = comp.label();
+    auto unit = comp.get_display_unit();
+    oss << name << "(" << unit << "), ";
+}
+
+// ----------------------------------------------------------------------------
+// don't do anything for the runtime user bundle
+template<>
+void write_names(bundle_t comp, std::ostringstream& oss)
+{
+    (void) comp;
+    (void) oss;
+}
+
+// ----------------------------------------------------------------------------
+// configure user global bundle
+void configure_bundle()
+{
+    // reset any previous configuration
+    bundle_t::reset();
+
+    // get tools from environment variable
+    auto env_tool = tim::get_env<std::string>("TECA_MEMPROF_COMPONENTS", "");
+    auto env_enum = tim::enumerate_components(tim::delimit(env_tool));
+    env_enum.erase(std::remove_if(env_enum.begin(), env_enum.end(),
+                                  [](int c) { return c == WALL_CLOCK; }),
+                                  env_enum.end());  
+    // configure the bundle
+    tim::configure<bundle_t>(env_tool);
+
+    // set bundle configured
+    is_configured = true;
+}
+
+} //namespace mem
+} //namespace measure
+
+#endif // TECA_HAS_TIMEMORY
 
 // *****************************************************************************
 #if defined(__linux) || defined(__APPLE__)
@@ -194,7 +363,39 @@ struct teca_memory_profiler::internals_type
         interval(60.0), data_mutex(PTHREAD_MUTEX_INITIALIZER),
         total_virtual_memory(0), available_virtual_memory(0),
         total_physical_memory(0), available_physical_memory(0)
-        {}
+        {
+
+#if defined (TECA_HAS_TIMEMORY)
+            auto _bundle = evts->get<bundle_t>();
+
+            if (_bundle != nullptr)
+            {
+                _bundle->start();
+                // configure user bundle
+                if (!measure::mem::is_configured)
+                {
+                    measure::mem::configure_bundle();
+                }
+            }
+
+            // create a new mem_measurement_t
+            evts = new mem_measurement_t("teca_mem_prof_delta");
+#endif // TECA_HAS_TIMEMORY
+        }
+#if defined(TECA_HAS_TIMEMORY)
+    ~internals_type()
+    {
+        // stop the bundle components
+        auto _bundle = evts->get<bundle_t>();
+
+        if (_bundle != nullptr)
+            _bundle->stop();
+
+        // destroy mem_measurement_t
+        delete evts;
+        evts = nullptr;
+    }
+#endif // TECA_HAS_TIMEMORY
 
     // initialize member vars with data about ram available on this system
     int initialize_memory();
@@ -233,10 +434,9 @@ struct teca_memory_profiler::internals_type
         const char* host_limit_env_var_name,
         const char* proc_limit_env_var_name);
 
-    // Get system RAM used by the process associated with the given
-    // process id in units of KiB.
-    long long get_proc_memory_used();
-
+#if defined (TECA_HAS_TIMEMORY)
+    mem_measurement_t *evts;
+#endif // TECA_HAS_TIMEMORY
     MPI_Comm comm;
     std::string filename;
     double interval;
@@ -258,18 +458,32 @@ extern "C" void *profile(void *argp)
 
     while (1)
     {
+#if defined (TECA_HAS_TIMEMORY)
+        // take a measurement
+        internals->evts->record();
+        
+        // get a tuple of current time and proc mem use data
+        auto _sample = internals->evts->get();
+#else
         // capture the current time and memory usage.
         struct timeval tv;
         gettimeofday(&tv, nullptr);
 
         double cur_time = tv.tv_sec + tv.tv_usec/1.0e6;
-        long long cur_mem = internals->get_proc_memory_used();
+        long long cur_mem = get_proc_memory_used();
+#endif // TECA_HAS_TIMEMORY
 
         pthread_mutex_lock(&internals->data_mutex);
 
+#if defined(TECA_HAS_TIMEMORY)
+        // extract and log current time and proc mem use data
+        internals->time_pt.push_back(std::get<0>(_sample));
+        internals->mem_use.push_back(std::get<1>(_sample));
+#else
         // log time and mem use
         internals->time_pt.push_back(cur_time);
         internals->mem_use.push_back(cur_mem);
+#endif // TECA_HAS_TIMEMORY
 
         // get next interval
         double interval = internals->interval;
@@ -356,7 +570,18 @@ int teca_memory_profiler::finalize()
     oss.setf(std::ios::scientific, std::ios::floatfield);
 
     if (rank == 0)
+#if !defined (TECA_HAS_TIMEMORY)
         oss << "# rank, time, memory kiB" << std::endl;
+#else
+    {
+        oss << "# rank, ";
+
+        mem_measurement_t _dummy("names");
+        auto comp_names = [&oss](auto comp){ measure::mem::write_names(comp, oss); };
+        measure::apply_tuple(_dummy, comp_names);
+        oss << std::endl;
+    }
+#endif // TECA_HAS_TIMEMORY
 
     long n_elem = this->internals->mem_use.size();
     for (long i = 0; i < n_elem; ++i)
@@ -669,68 +894,6 @@ long long teca_memory_profiler::internals_type::get_host_memory_used()
 }
 
 // --------------------------------------------------------------------------
-long long teca_memory_profiler::internals_type::get_proc_memory_used()
-{
-#if defined(_WIN32) && defined(KWSYS_SYS_HAS_PSAPI)
-    long pid = get_current_process_id();
-    HANDLE h_proc;
-    h_proc = open_process(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
-    if (h_proc == 0)
-    {
-        return -1;
-    }
-    PROCESS_MEMORY_COUNTERS pmc;
-    int ok = get_process_memory_info(h_proc, &pmc, sizeof(pmc));
-    close_handle(h_proc);
-    if (!ok)
-    {
-        return -2;
-    }
-    return pmc.working_set_size / 1024;
-#elif defined(__linux)
-    long long mem_used = 0;
-    int ierr = get_field_from_file("/proc/self/status", "VmRSS:", mem_used);
-    if (ierr)
-        return -1;
-    return mem_used;
-#elif defined(__APPLE__)
-    long long mem_used = 0;
-    pid_t pid = getpid();
-    std::ostringstream oss;
-    oss << "ps -o rss= -p " << pid;
-    FILE* file = popen(oss.str().c_str(), "r");
-    if (file == 0)
-    {
-        return -1;
-    }
-    oss.str("");
-    while (!feof(file) && !ferror(file))
-    {
-        char buf[256] = { '\0' };
-        errno = 0;
-        long long n_read = fread(buf, 1, 256, file);
-
-        if (ferror(file) && (errno == EINTR))
-            clearerr(file);
-
-        if (n_read)
-            oss << buf;
-    }
-    int ierr = ferror(file);
-    pclose(file);
-    if (ierr)
-        return -2;
-
-    std::istringstream iss(oss.str());
-    iss >> mem_used;
-
-    return mem_used;
-#else
-    return 0;
-#endif
-}
-
-// --------------------------------------------------------------------------
 int teca_memory_profiler::internals_type::initialize_windows_memory()
 {
 #if defined(_WIN32)
@@ -966,5 +1129,68 @@ int teca_memory_profiler::internals_type::initialize_apple_memory()
     return 0;
 #else
     return -1;
+#endif
+}
+
+
+// --------------------------------------------------------------------------
+inline static int64_t get_proc_memory_used()
+{
+#if defined(_WIN32) && defined(KWSYS_SYS_HAS_PSAPI)
+    long pid = get_current_process_id();
+    HANDLE h_proc;
+    h_proc = open_process(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+    if (h_proc == 0)
+    {
+        return -1;
+    }
+    PROCESS_MEMORY_COUNTERS pmc;
+    int ok = get_process_memory_info(h_proc, &pmc, sizeof(pmc));
+    close_handle(h_proc);
+    if (!ok)
+    {
+        return -2;
+    }
+    return pmc.working_set_size / 1024;
+#elif defined(__linux)
+    int64_t mem_used = 0;
+    int ierr = get_field_from_file("/proc/self/status", "VmRSS:", mem_used);
+    if (ierr)
+        return -1;
+    return mem_used;
+#elif defined(__APPLE__)
+    int64_t mem_used = 0;
+    pid_t pid = getpid();
+    std::ostringstream oss;
+    oss << "ps -o rss= -p " << pid;
+    FILE* file = popen(oss.str().c_str(), "r");
+    if (file == 0)
+    {
+        return -1;
+    }
+    oss.str("");
+    while (!feof(file) && !ferror(file))
+    {
+        char buf[256] = { '\0' };
+        errno = 0;
+        long long n_read = fread(buf, 1, 256, file);
+
+        if (ferror(file) && (errno == EINTR))
+            clearerr(file);
+
+        if (n_read)
+            oss << buf;
+    }
+    int ierr = ferror(file);
+    pclose(file);
+    if (ierr)
+        return -2;
+
+    std::istringstream iss(oss.str());
+    iss >> mem_used;
+
+    return mem_used;
+#else
+    return 0;
 #endif
 }

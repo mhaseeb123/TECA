@@ -298,6 +298,18 @@ else()
     message(STATUS "Profiling features -- disabled")
 endif()
 
+# enable timemory instrumentation interface
+find_package(TIMEMORY)
+set (tim OFF)
+if (TECA_ENABLE_PROFILER)
+    set (tim ON)
+    set (CMAKE_CXX_STANDARD 14)
+    message(STATUS "TIMEMORY instrumentation -- enabled")
+else()
+    message(STATUS "TIMEMORY instrumentation -- disabled. Set TIMEMORY_ROOT_DIR to enable.")
+endif()
+set (TECA_HAS_TIMEMORY ${tim} CACHE BOOL "Enable TIMEMORY")
+
 # get the build version descriptor
 if (NOT DEFINED TECA_VERSION)
     set(tmp)

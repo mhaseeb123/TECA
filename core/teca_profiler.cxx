@@ -22,6 +22,112 @@
 #include <unordered_map>
 #include <mutex>
 
+#if defined(TECA_HAS_TIMEMORY)
+// timemory include
+#include "timemory/timemory.hpp"
+
+using namespace tim::component;
+
+// user bundle
+struct teca_time_tag 
+{};
+
+// custom user bundle
+using timing_bundle_t = user_bundle<0, teca_time_tag>;
+
+// add components to time profiler
+using measurement_t   = tim::component_tuple_t<wall_clock, timing_bundle_t>;
+using bundle_t        = timing_bundle_t;
+
+namespace measure
+{
+// ----------------------------------------------------------------------------
+// tuple access helper functions
+template <typename Tuple, typename F, std::size_t ...Indices>
+void for_each_impl(Tuple&& tuple, F&& f, std::index_sequence<Indices...>) {
+    using swallow = int[];
+    (void)swallow{1,
+        (f(std::get<Indices>(std::forward<Tuple>(tuple))), void(), int{})...
+    };
+}
+
+// ----------------------------------------------------------------------------
+// tuple access helper functions
+template <typename Tuple, typename F>
+void apply_tuple(Tuple&& tuple, F&& f) {
+    constexpr std::size_t N = std::tuple_size<std::remove_reference_t<Tuple>>::value;
+    for_each_impl(std::forward<Tuple>(tuple), std::forward<F>(f), 
+                  std::make_index_sequence<N>{});
+}
+
+namespace time
+{
+// is global bundle configured
+static bool is_configured = false;
+
+// ----------------------------------------------------------------------------
+// print static component names onto the stringstream
+template<typename Tp>
+void write_names(Tp comp, std::ostringstream& oss)
+{
+    auto name = comp.label();
+    auto unit = comp.get_display_unit();
+    oss << "start:" << name << "(" << unit << "), ";
+    oss << "end:"   << name << "(" << unit << "), ";
+    oss << "delta:" << name << "(" << unit << "), ";
+}
+
+// ----------------------------------------------------------------------------
+// don't do anything for the runtime user bundle
+template<>
+void write_names(bundle_t comp, std::ostringstream& oss)
+{
+    (void) comp;
+    (void) oss;
+}
+
+// ----------------------------------------------------------------------------
+// print static component data onto the string
+template<typename Tp>
+void write_data(Tp comp, std::ostream& str)
+{
+    str << comp.get() << ", " ;
+}
+
+// ----------------------------------------------------------------------------
+// don't do anything for the runtime user bundle
+template<>
+void write_data(bundle_t comp, std::ostream& str)
+{
+    (void) comp;
+    (void) str;
+}
+
+// ----------------------------------------------------------------------------
+// configure user global bundle
+void configure_bundle()
+{
+    // reset any previous configuration
+    bundle_t::reset();
+
+    // get tools from environment variable
+    auto env_tool = tim::get_env<std::string>("TECA_PROFILER_COMPONENTS", "");
+    auto env_enum = tim::enumerate_components(tim::delimit(env_tool));
+    env_enum.erase(std::remove_if(env_enum.begin(), env_enum.end(),
+                                  [](int c) { return c == WALL_CLOCK; }),
+                                  env_enum.end());
+    // configure the bundle
+    tim::configure<bundle_t>(env_enum);
+
+    // set bundle configured
+    is_configured = true;
+}
+
+} //namespace time
+} //namespace measure
+
+#endif // TECA_HAS_TIMEMORY
+
 namespace impl
 {
 #if defined(TECA_ENABLE_PROFILER)
@@ -29,7 +135,7 @@ namespace impl
 // container for data captured in a timing event
 struct event
 {
-    event();
+    event(std::string evt_name);
 
     // serializes the event in CSV format into the stream.
     void to_stream(std::ostream &str) const;
@@ -42,7 +148,11 @@ struct event
     // event duration, initially start time, end time and duration
     // are recorded. when summarizing this contains min,max and sum
     // of the summariezed set of events
+#if defined(TECA_HAS_TIMEMORY)
+    std::vector<measurement_t> evts;
+#else
     double time[3];
+#endif // TECA_HAS_TIMEMORY
 
     // how deep is the event stack
     int depth;
@@ -71,6 +181,7 @@ static std::mutex event_log_mutex;
 // memory profiler
 static teca_memory_profiler mem_prof;
 
+#if !defined(TECA_HAS_TIMEMORY)
 // return high res system time relative to system epoch
 static double get_system_time()
 {
@@ -78,11 +189,20 @@ static double get_system_time()
     gettimeofday(&tv, nullptr);
     return tv.tv_sec + tv.tv_usec/1.0e6;
 }
-
+#endif // TECA_HAS_TIMEMORY
 
 // --------------------------------------------------------------------------
-event::event() : time{0,0,0}, depth(0), tid(std::this_thread::get_id())
+event::event(std::string evt_name): name(evt_name), depth(0), tid(std::this_thread::get_id())
 {
+#if defined (TECA_HAS_TIMEMORY)
+    if (!measure::time::is_configured)
+        measure::time::configure_bundle();
+
+    evts = { measurement_t (std::string(evt_name + "_start")), 
+             measurement_t (std::string(evt_name + "_end")), 
+             measurement_t (std::string(evt_name + "_delta")),
+           };
+#endif // TECA_HAS_TIMEMORY
 }
 
 //-----------------------------------------------------------------------------
@@ -97,14 +217,31 @@ void event::to_stream(std::ostream &str) const
     if (ini && !fin)
         MPI_Comm_rank(impl::comm, &rank);
 #endif
+
+#if !defined(TECA_HAS_TIMEMORY)
     str << rank << ", " << this->tid << ", \"" << this->name << "\", "
         << this->time[START] << ", " << this->time[END] << ", "
         << this->time[DELTA] << ", " << this->depth << std::endl;
 #else
+    // print all component values
+    str << rank << ", " << this->tid << ", \"" << this->name << "\", ";
+
+    // get time data and print
+    auto comp_data = [&str](auto comps) { measure::time::write_data(comps, str); };
+
+    for (auto _evnt_tuple: this->evts)
+    {
+        measure::apply_tuple(_evnt_tuple, comp_data);
+    }
+
+    str << this->depth << std::endl;
+#endif // TECA_HAS_TIMEMORY
+
+#else
     (void)str;
-#endif
+#endif // TECA_ENABLE_PROFILER
 }
-#endif
+#endif // TECA_ENABLE_PROFILER
 }
 
 
@@ -388,7 +525,18 @@ int teca_profiler::finalize()
         std::ostringstream oss;
 
         if (rank == 0)
+#if !defined(TECA_HAS_TIMEMORY)
             oss << "# rank, thread, name, start time, end time, delta, depth" << std::endl;
+#else
+        {
+            oss << "# rank, thread, name, ";
+
+            measurement_t _dummy("names");
+            auto comp_names = [&oss](auto comp){ measure::time::write_names(comp, oss); };
+            measure::apply_tuple(_dummy, comp_names);
+            oss << "depth" << std::endl;
+        }
+#endif // TECA_HAS_TIMEMORY
 
         teca_profiler::to_stream(oss);
 
@@ -451,9 +599,13 @@ int teca_profiler::start_event(const char* eventname)
 #if defined(TECA_ENABLE_PROFILER)
     if (impl::logging_enabled & 0x01)
     {
-        impl::event evt;
-        evt.name = eventname;
+        impl::event evt(eventname);
+#if defined (TECA_HAS_TIMEMORY)
+        evt.evts[impl::event::START].record();
+        evt.evts[impl::event::DELTA].start();
+#else
         evt.time[impl::event::START] = impl::get_system_time();
+#endif // TECA_HAS_TIMEMORY
 
         std::lock_guard<std::mutex> lock(impl::event_log_mutex);
         impl::active_events[evt.tid].push_back(evt);
@@ -470,8 +622,10 @@ int teca_profiler::end_event(const char* eventname)
 #if defined(TECA_ENABLE_PROFILER)
     if (impl::logging_enabled & 0x01)
     {
+#if !defined (TECA_HAS_TIMEMORY)
         // get end time
         double end_time = impl::get_system_time();
+#endif // TECA_HAS_TIMEMORY
 
         // get this thread's event log
         std::thread::id tid = std::this_thread::get_id();
@@ -498,8 +652,13 @@ int teca_profiler::end_event(const char* eventname)
             abort();
         }
 #endif
+#if defined (TECA_HAS_TIMEMORY)
+        evt.evts[impl::event::DELTA].stop();
+        evt.evts[impl::event::END].record();
+#else
         evt.time[impl::event::END] = end_time;
         evt.time[impl::event::DELTA] = end_time - evt.time[impl::event::START];
+#endif // TECA_HAS_TIMEMORY
         evt.depth = iter->second.size();
 
         impl::event_log.emplace_back(std::move(evt));
