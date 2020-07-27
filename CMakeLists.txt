@@ -301,7 +301,7 @@ endif()
 # enable timemory instrumentation interface
 find_package(TIMEMORY)
 set (tim OFF)
-if (TECA_ENABLE_PROFILER)
+if (TECA_ENABLE_PROFILER AND TIMEMORY_FOUND)
     set (tim ON)
     set (CMAKE_CXX_STANDARD 14)
     message(STATUS "TIMEMORY instrumentation -- enabled")
